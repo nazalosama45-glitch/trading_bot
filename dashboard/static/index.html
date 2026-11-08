@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Practice Trading Bot</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', sans-serif; line-height: 1.5; }
+  header { background: #161b22; border-bottom: 1px solid #30363d; padding: 16px 24px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 20px; font-weight: 600; }
+  .badge { background: #1f6feb33; color: #79c0ff; border: 1px solid #1f6feb; border-radius: 20px; padding: 3px 12px; font-size: 13px; margin-left: 10px; }
+  .controls { display: flex; gap: 10px; align-items: center; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+  .dot-on { background: #3fb950; box-shadow: 0 0 8px #3fb950; }
+  .dot-off { background: #6e7681; }
+  .btn { padding: 8px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn:hover { opacity: .85; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-start { background: #238636; color: #fff; }
+  .btn-stop { background: #da3633; color: #fff; }
+
+  main { max-width: 1000px; margin: 0 auto; padding: 20px 16px 40px; }
+  .verdict { background: #161b22; border: 1px solid #30363d; border-left: 5px solid #8b949e; border-radius: 10px; padding: 18px 20px; margin-bottom: 20px; }
+  .verdict.good { border-left-color: #3fb950; }
+  .verdict.bad { border-left-color: #f85149; }
+  .verdict .title { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: #8b949e; margin-bottom: 6px; }
+  .verdict .main { font-size: 20px; font-weight: 600; }
+  .verdict .sub { color: #8b949e; font-size: 14px; margin-top: 6px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 14px 16px; }
+  .card .label { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .card .value { font-size: 26px; font-weight: 700; }
+  .card .hint { font-size: 12px; color: #8b949e; margin-top: 4px; }
+  .green { color: #3fb950; } .red { color: #f85149; } .blue { color: #58a6ff; }
+
+  h2 { font-size: 16px; font-weight: 600; margin: 8px 0 4px; }
+  .explain { font-size: 13px; color: #8b949e; margin-bottom: 10px; }
+  .section { margin-bottom: 28px; }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; padding: 8px 10px; background: #161b22; color: #8b949e; font-weight: 600; border-bottom: 1px solid #30363d; white-space: nowrap; }
+  td { padding: 8px 10px; border-bottom: 1px solid #21262d; white-space: nowrap; }
+  .empty { color: #8b949e; padding: 14px 10px; }
+
+  .feed { background: #161b22; border: 1px solid #30363d; border-radius: 10px; max-height: 300px; overflow-y: auto; }
+  .feed .row { padding: 8px 14px; border-bottom: 1px solid #21262d; font-size: 14px; display: flex; gap: 12px; }
+  .feed .time { color: #8b949e; font-size: 12px; min-width: 56px; padding-top: 2px; }
+  .feed .row.buy .what { color: #58a6ff; }
+  .feed .row.win .what { color: #3fb950; }
+  .feed .row.lose .what { color: #f85149; }
+  .feed .row.warn .what { color: #d29922; }
+
+  details { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 12px 16px; margin-bottom: 12px; }
+  summary { cursor: pointer; font-weight: 600; }
+  details dl { margin-top: 10px; font-size: 14px; }
+  details dt { font-weight: 600; margin-top: 8px; }
+  details dd { color: #8b949e; }
+  .log-box { font-family: monospace; font-size: 12px; color: #8b949e; max-height: 200px; overflow-y: auto; margin-top: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+
+<header>
+  <div><h1 style="display:inline">Practice Trading Bot</h1><span class="badge">Fake money. Nothing real is at risk.</span></div>
+  <div class="controls">
+    <span id="statusText"><span class="dot dot-off"></span>The bot is turned off</span>
+    <button class="btn btn-start" id="btnStart" onclick="startBot()">Turn on</button>
+    <button class="btn btn-stop" id="btnStop" onclick="stopBot()" disabled>Turn off</button>
+  </div>
+</header>
+
+<main>
+  <div class="verdict" id="money" style="text-align:center;padding:24px 20px">
+    <div class="title">Right now, are we winning or losing money?</div>
+    <div id="moneyMain" style="font-size:40px;font-weight:700;margin:6px 0">-</div>
+    <div class="sub" id="moneySub"></div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+    <div class="card" style="text-align:center;grid-column:1/-1"><div class="label">MONEY IN THE ACCOUNT (fake money)</div><div class="value" style="font-size:44px" id="sbAccount">-</div><div class="hint" id="sbAccountHint">Loading...</div></div>
+    <div class="card" style="text-align:center"><div class="label">TOTAL TRADES</div><div class="value blue" style="font-size:40px" id="sbTotal">-</div><div class="hint" id="sbTotalHint"></div></div>
+    <div class="card" style="text-align:center"><div class="label">WINNING</div><div class="value green" style="font-size:40px" id="sbWin">-</div><div class="hint" id="sbWinHint"></div></div>
+    <div class="card" style="text-align:center"><div class="label">LOSING</div><div class="value red" style="font-size:40px" id="sbLose">-</div><div class="hint" id="sbLoseHint"></div></div>
+    <div class="card" style="text-align:center"><div class="label">TOTAL PROFIT</div><div class="value" style="font-size:40px" id="sbProfit">-</div><div class="hint">Fake dollars: finished + open trades</div></div>
+  </div>
+
+  <div class="verdict" id="verdict">
+    <div class="title">How is the bot doing?</div>
+    <div class="main" id="verdictMain">Loading...</div>
+    <div class="sub" id="verdictSub"></div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="label">Finished trades</div><div class="value blue" id="total">-</div><div class="hint">Bought and then sold again</div></div>
+    <div class="card"><div class="label">Made money</div><div class="value green" id="wins">-</div><div class="hint">Trades that ended in profit</div></div>
+    <div class="card"><div class="label">Lost money</div><div class="value red" id="losses">-</div><div class="hint">Trades that ended in a loss</div></div>
+    <div class="card"><div class="label">Win rate</div><div class="value" id="winRate">-</div><div class="hint">Out of every 100 trades, how many made money</div></div>
+    <div class="card"><div class="label">Total result</div><div class="value" id="totalPnl">-</div><div class="hint">All finished trades added together</div></div>
+    <div class="card"><div class="label">Learning</div><div class="value blue" id="learnNext">-</div><div class="hint" id="learnHint">Trades left until the bot studies its results</div></div>
+    <div class="card"><div class="label">Open trades now</div><div class="value" id="openNow">-</div><div class="hint" id="openHint">Not sold yet, so not counted as won or lost</div></div>
+    <div class="card"><div class="label">Best trade</div><div class="value green" id="bestTrade">-</div><div class="hint">Biggest single gain</div></div>
+    <div class="card"><div class="label">Worst trade</div><div class="value red" id="worstTrade">-</div><div class="hint">Biggest single loss</div></div>
+  </div>
+
+  <div class="section">
+    <h2>Trades happening right now <span id="posUpdated" style="font-weight:400;color:#8b949e;font-size:12px"></span></h2>
+    <p class="explain">The bot bought these coins and is waiting for the price to move. When the price rises or falls to one of the sell prices, it sells and the trade moves to the finished list below.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Coin</th><th>Bought at</th><th>Price now</th><th>Sells to limit loss at</th><th>Sells to keep profit at</th><th>Right now</th></tr></thead>
+      <tbody id="posTable"></tbody>
+    </table></div>
+  </div>
+
+  <div class="section">
+    <h2>What the bot is doing</h2>
+    <p class="explain">Newest at the top. It checks the market every few seconds, so many lines are just "no chance found yet".</p>
+    <div class="feed" id="feed"></div>
+  </div>
+
+  <div class="section">
+    <h2>Finished trades</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>When</th><th>Coin</th><th>Bought at</th><th>Sold at</th><th>Result</th><th></th></tr></thead>
+      <tbody id="tradeTable"></tbody>
+    </table></div>
+  </div>
+
+  <details>
+    <summary>What do these words mean?</summary>
+    <dl>
+      <dt>Fake money / practice</dt><dd>The bot trades on a test account with play money. It can't touch your real Binance account.</dd>
+      <dt>Buying and selling</dt><dd>The bot buys a coin hoping the price will go up, then sells it later. If it sold higher than it bought, that's a profit.</dd>
+      <dt>Sells to limit loss</dt><dd>A safety exit. If the price falls to this number, the bot sells right away so a bad trade can't get worse.</dd>
+      <dt>Sells to keep profit</dt><dd>If the price rises to this number, the bot sells and keeps the gain.</dd>
+      <dt>Win rate</dt><dd>The share of trades that made money. 40 out of 100 is a 40% win rate. A low win rate can still be fine if the wins are bigger than the losses.</dd>
+      <dt>Total result</dt><dd>Every finished trade's gain or loss added together, in percent. Plus (green) means it's ahead, minus (red) means it's behind.</dd>
+      <dt>Learning</dt><dd>After every 20 finished trades, the bot studies what worked and what didn't, and adjusts how it picks trades.</dd>
+    </dl>
+  </details>
+
+  <details>
+    <summary>Technical log (for experts)</summary>
+    <div class="log-box" id="logBox"></div>
+  </details>
+</main>
+
+<script>
+function esc(s) { return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function money(n) { return Number(n).toLocaleString(undefined, { maximumFractionDigits: 6 }); }
+function pct(n) { return (n >= 0 ? "+" : "") + n.toFixed(2) + "%"; }
+function usd(n) { return (n >= 0 ? "+$" : "-$") + Math.abs(n).toFixed(2); }
+
+let closedUsd = 0, openUsd = 0, haveClosed = false, havePos = false;
+let cTotal = 0, cWins = 0, cLosses = 0, oUp = 0, oDown = 0;
+function updateMoney() {
+  if (!haveClosed || !havePos) return;
+  const total = closedUsd + openUsd;
+  const openCount = oUp + oDown;
+  document.getElementById("sbTotal").textContent = cTotal + openCount;
+  document.getElementById("sbTotalHint").textContent = cTotal + " finished + " + openCount + " open";
+  document.getElementById("sbWin").textContent = cWins + oUp;
+  document.getElementById("sbWinHint").textContent = cWins + " finished + " + oUp + " open (up now)";
+  document.getElementById("sbLose").textContent = cLosses + oDown;
+  document.getElementById("sbLoseHint").textContent = cLosses + " finished + " + oDown + " open (down now)";
+  const sp = document.getElementById("sbProfit");
+  sp.textContent = usd(total);
+  sp.className = "value " + (total > 0.005 ? "green" : total < -0.005 ? "red" : "");
+  const box = document.getElementById("money");
+  const main = document.getElementById("moneyMain");
+  const eps = 0.005;
+  box.className = "verdict " + (total > eps ? "good" : total < -eps ? "bad" : "");
+  if (total > eps) { main.className = "green"; main.textContent = "WINNING " + usd(total); }
+  else if (total < -eps) { main.className = "red"; main.textContent = "LOSING " + usd(total); }
+  else { main.className = ""; main.textContent = "Even $0.00"; }
+  document.getElementById("moneySub").textContent =
+    "Finished trades: " + usd(closedUsd) + "  |  Open trades if sold now: " + usd(openUsd) +
+    "  |  Fake money, started with 10,000 USDT (" + (total / 100).toFixed(3) + "% of it)";
+}
+
+async function fetchStats() {
+  const r = await fetch("/api/stats").then(x => x.json()).catch(() => null);
+  if (!r || r.error) return;
+  const v = document.getElementById("verdict");
+  const vm = document.getElementById("verdictMain");
+  const vs = document.getElementById("verdictSub");
+  v.className = "verdict";
+
+  closedUsd = r.total_usd || 0; cTotal = r.total; cWins = r.wins; cLosses = r.losses; haveClosed = true; updateMoney();
+  document.getElementById("total").textContent = r.total;
+  const left = 20 - (r.total % 20);
+  document.getElementById("learnNext").textContent = left + " more";
+  document.getElementById("learnHint").textContent = r.total >= 100
+    ? "Trades until the next study. It now learns only from its own trades."
+    : "Finished trades until the bot studies its results and gets smarter (every 20)";
+  document.getElementById("wins").textContent = r.wins;
+  document.getElementById("losses").textContent = r.losses;
+  const wr = document.getElementById("winRate");
+  wr.textContent = r.total ? r.win_rate + "%" : "-";
+  wr.className = "value " + (r.total ? (r.win_rate >= 50 ? "green" : "") : "");
+  const pnl = document.getElementById("totalPnl");
+  pnl.textContent = r.total ? pct(r.total_pnl) : "-";
+  pnl.className = "value " + (r.total ? (r.total_pnl >= 0 ? "green" : "red") : "");
+  document.getElementById("bestTrade").textContent = r.total ? pct(r.best_trade) : "-";
+  document.getElementById("worstTrade").textContent = r.total ? pct(r.worst_trade) : "-";
+
+  if (r.total === 0) {
+    vm.textContent = "No trade has finished yet.";
+    vs.textContent = "That's normal at the start. The bot is watching the market and waiting for a good moment. Check back in a few hours.";
+  } else if (r.total < 20) {
+    vm.textContent = r.total + " trade" + (r.total > 1 ? "s" : "") + " finished so far: " + r.wins + " made money, " + r.losses + " lost money.";
+    vs.textContent = "Too early to judge. Wait until at least 20 trades have finished before trusting any of these numbers.";
+  } else if (r.total_pnl >= 0) {
+    v.className = "verdict good";
+    vm.textContent = "So far the bot is ahead by " + pct(r.total_pnl) + " (fake money).";
+    vs.textContent = r.total + " trades finished, " + r.win_rate + "% made money. Good so far, but practice results are not a promise for real money.";
+  } else {
+    v.className = "verdict bad";
+    vm.textContent = "So far the bot is behind by " + pct(Math.abs(r.total_pnl)).replace("+", "") + " (fake money).";
+    vs.textContent = r.total + " trades finished, " + r.win_rate + "% made money. It's still learning. This is exactly why we practice with fake money first.";
+  }
+
+  const tbody = document.getElementById("tradeTable");
+  tbody.innerHTML = r.trades.length ? r.trades.map(t => `
+    <tr>
+      <td>${esc(t.ts.substring(0,16).replace("T"," "))}</td>
+      <td>${esc(t.symbol)}</td>
+      <td>${money(t.entry)}</td>
+      <td>${t.exit ? money(t.exit) : "-"}</td>
+      <td class="${t.win ? 'green' : 'red'}">${pct(t.pnl)}</td>
+      <td class="${t.win ? 'green' : 'red'}">${t.win ? "Made money" : "Lost money"}</td>
+    </tr>`).join("") : '<tr><td colspan="6" class="empty">No finished trades yet.</td></tr>';
+}
+
+async function fetchPositions() {
+  const r = await fetch("/api/positions").then(x => x.json()).catch(() => null);
+  if (!r) return;
+  const body = document.getElementById("posTable");
+  body.innerHTML = r.positions.length ? r.positions.map(p => `
+    <tr>
+      <td>${esc(p.symbol)}</td>
+      <td>${money(p.entry)}</td>
+      <td>${money(p.price)}</td>
+      <td>${money(p.stop_loss)}</td>
+      <td>${money(p.take_profit)}</td>
+      <td class="${p.pnl_pct >= 0 ? 'green' : 'red'}">${p.pnl_pct >= 0 ? "Up " : "Down "}${Math.abs(p.pnl_pct).toFixed(2)}% ($${p.pnl_usd})</td>
+    </tr>`).join("") : '<tr><td colspan="6" class="empty">No open trades at the moment. The bot is waiting for a good chance.</td></tr>';
+  const up = r.positions.filter(p => p.pnl_pct >= 0).length;
+  const down = r.positions.length - up;
+  if (r.equity !== undefined) {
+    const diff = r.equity - r.start_capital;
+    const acc = document.getElementById("sbAccount");
+    acc.textContent = "$" + r.equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    acc.className = "value " + (diff > 0.005 ? "green" : diff < -0.005 ? "red" : "");
+    document.getElementById("sbAccountHint").textContent =
+      "Started with $" + r.start_capital.toLocaleString() + "  |  now " + usd(diff) +
+      "  |  cash $" + r.cash_usdt.toLocaleString() + " + coins held $" + r.held_value.toLocaleString();
+  }
+  const openSum = r.positions.reduce((s, p) => s + p.pnl_usd, 0);
+  openUsd = openSum; oUp = up; oDown = down; havePos = true; updateMoney();
+  const openEl = document.getElementById("openNow");
+  openEl.textContent = usd(openSum);
+  openEl.className = "value " + (r.positions.length ? (openSum >= 0 ? "green" : "red") : "");
+  document.getElementById("openHint").textContent = r.positions.length
+    ? `${r.positions.length} open: ${up} up, ${down} down. If sold now. Not counted as won or lost yet.`
+    : "No open trades";
+  document.getElementById("posUpdated").textContent = r.updated ? "(updated " + r.updated.substring(11, 19) + " UTC)" : "";
+}
+
+async function fetchStatus() {
+  const r = await fetch("/api/bot/status").then(x => x.json()).catch(() => ({ running: false }));
+  document.getElementById("statusText").innerHTML = r.running
+    ? '<span class="dot dot-on"></span>The bot is working'
+    : '<span class="dot dot-off"></span>The bot is turned off';
+  document.getElementById("btnStart").disabled = r.running;
+  document.getElementById("btnStop").disabled = !r.running;
+}
+
+function friendly(line) {
+  const m = line.match(/^\d{4}-\d\d-\d\d (\d\d:\d\d):\d\d,\d+ \[(\w+)\] [\w.]+: (.*)$/);
+  if (!m) return null;
+  const time = m[1], level = m[2], msg = m[3];
+  let x;
+  if ((x = msg.match(/Order filled: BUY ([\d.]+) (\S+) @ ([\d.]+)/))) return { time, kind: "buy", text: `Bought ${x[1]} ${x[2]} at $${money(x[3])}` };
+  if ((x = msg.match(/Order filled: SELL ([\d.]+) (\S+) @ ([\d.]+)/))) return { time, kind: "buy", text: `Sold ${x[1]} ${x[2]} at $${money(x[3])}` };
+  if ((x = msg.match(/Signal: BUY (\S+)/))) return { time, kind: "buy", text: `Spotted a chance to buy ${x[1]}` };
+  if ((x = msg.match(/(\S+): Stop-loss hit @ ([\d.]+)/))) return { time, kind: "lose", text: `${x[1]} fell to $${money(x[2])}, so the bot sold to limit the loss` };
+  if ((x = msg.match(/(\S+): Take-profit hit @ ([\d.]+)/))) return { time, kind: "win", text: `${x[1]} rose to $${money(x[2])}, so the bot sold and kept the profit` };
+  if ((x = msg.match(/Position closed: (\S+) .*\(([-\d.]+)%\)/))) {
+    const p = parseFloat(x[2]);
+    return { time, kind: p >= 0 ? "win" : "lose", text: `Trade finished on ${x[1]}: ${p >= 0 ? "made" : "lost"} ${Math.abs(p).toFixed(2)}%` };
+  }
+  if ((x = msg.match(/SafetyGuard blocked (\S+)/))) return { time, kind: "warn", text: `Skipped ${x[1]}: the market looks too unpredictable right now` };
+  if ((x = msg.match(/Trade blocked for (\S+): (.*)/))) return { time, kind: "warn", text: `Did not buy ${x[1]}: ${x[2].toLowerCase()}` };
+  if (/Trading Bot starting/.test(msg)) return { time, kind: "", text: "The bot was turned on" };
+  if (/Restored open trades/.test(msg)) return { time, kind: "", text: "The bot remembered its open trades from before" };
+  if (/Retraining ML model/.test(msg)) return { time, kind: "", text: "The bot is studying its past trades to get smarter" };
+  if (level === "ERROR") return { time, kind: "warn", text: "Problem: " + msg.substring(0, 90) };
+  return null;
+}
+
+async function fetchLogs() {
+  const r = await fetch("/api/logs").then(x => x.json()).catch(() => ({ lines: [] }));
+  const items = r.lines.map(friendly).filter(Boolean).slice(-40).reverse();
+  document.getElementById("feed").innerHTML = items.length
+    ? items.map(i => `<div class="row ${i.kind}"><span class="time">${esc(i.time)}</span><span class="what">${esc(i.text)}</span></div>`).join("")
+    : '<div class="row"><span class="what" style="color:#8b949e">Nothing to report yet. The bot is watching the market.</span></div>';
+  document.getElementById("logBox").textContent = r.lines.slice(-60).join("\n");
+}
+
+async function startBot() {
+  document.getElementById("btnStart").disabled = true;
+  await fetch("/api/bot/start", { method: "POST" });
+  setTimeout(fetchStatus, 1000);
+}
+async function stopBot() {
+  document.getElementById("btnStop").disabled = true;
+  await fetch("/api/bot/stop", { method: "POST" });
+  setTimeout(fetchStatus, 1000);
+}
+
+function refresh() { fetchPositions(); fetchStats(); fetchStatus(); fetchLogs(); }
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>

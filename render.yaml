@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: practice-trading-bot
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: python dashboard/server.py
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      # You type these four in the Render screen (never put them in this file)
+      - key: DASHBOARD_PASSWORD
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: BINANCE_API_KEY
+        sync: false
+      - key: BINANCE_SECRET
+        sync: false
+      - key: DASHBOARD_HOST
+        value: 0.0.0.0
+      - key: DASHBOARD_USER
+        value: admin
+      - key: AUTOSTART_BOT
+        value: "true"
+      - key: USE_TESTNET
+        value: "true"
+      - key: DRY_RUN
+        value: "false"
+      - key: PRACTICE_MODE
+        value: "true"
+      - key: SYMBOLS
+        value: BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,XRP/USDT,ADA/USDT,DOGE/USDT,LINK/USDT,LTC/USDT,AVAX/USDT
+      - key: TIMEFRAME
+        value: 15m
+      - key: ML_MIN_PROB
+        value: "0"
+      - key: MAX_OPEN_POSITIONS
+        value: "8"
+      - key: DAILY_LOSS_LIMIT_PCT
+        value: "1.0"
+      - key: MAX_NOTIONAL_PCT
+        value: "0.01"
+      - key: MAX_POSITION_PCT
+        value: "0.02"
+      - key: START_CAPITAL
+        value: "10000"
