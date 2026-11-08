@@ -5,3 +5,4 @@ models/
 __pycache__/
 *.pyc
 *.zip
+connect_database.ps1
