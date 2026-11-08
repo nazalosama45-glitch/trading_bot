@@ -35,6 +35,8 @@ DASH_PORT = int(os.getenv("PORT") or os.getenv("DASHBOARD_PORT") or "5000")  # h
 DASH_USER = os.getenv("DASHBOARD_USER", "admin")
 DASH_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
 AUTOSTART_BOT = os.getenv("AUTOSTART_BOT", "false").lower() == "true"
+# When true, viewing needs no login; only the actions that change things (start/stop) still do.
+PUBLIC_READ = os.getenv("DASHBOARD_PUBLIC_READ", "false").lower() == "true"
 WANT_RUNNING = False  # True once the bot has been started; the watchdog restarts it if it dies
 
 
@@ -46,6 +48,8 @@ def healthz():
 @app.before_request
 def require_login():
     if not DASH_PASSWORD or request.path == "/healthz":
+        return None
+    if PUBLIC_READ and request.method in ("GET", "HEAD"):
         return None
     auth = request.authorization
     if (auth

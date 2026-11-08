@@ -121,8 +121,10 @@ def run():
     logger.info(f"  Timeframe: {config.TIMEFRAME}")
     if config.DRY_RUN:
         logger.info("  ⚠️  DRY RUN MODE — no real orders will be placed")
+    elif config.USE_TESTNET:
+        logger.info("  TESTNET: orders are real but the money is fake")
     else:
-        logger.warning("  🔴 LIVE MODE — real money at risk!")
+        logger.warning("  LIVE MODE: real money at risk!")
     logger.info("=" * 60)
 
     if config.PRACTICE_MODE and not config.USE_TESTNET:
