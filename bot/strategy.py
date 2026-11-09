@@ -58,14 +58,22 @@ def candidate(df: pd.DataFrame, symbol: str, min_score: Optional[int] = None,
     )
 
 
-def decide(signal: Signal, ml_model, threshold: float) -> bool:
-    """Take a real trade? Follow the model, but sometimes explore what it would skip."""
+def win_chance(ml_model, features: list, side: str) -> Optional[float]:
+    """The model's estimated chance that betting this direction wins."""
     if ml_model is None:
-        return True
+        return None
+    from bot.learner import with_side
     try:
-        prob = float(ml_model.predict_proba([signal.features])[0][1])
+        return float(ml_model.predict_proba([with_side(features, side)])[0][1])
     except Exception as e:
         logger.warning(f"ML prediction failed: {e}")
+        return None
+
+
+def decide(signal: Signal, ml_model, threshold: float) -> bool:
+    """Take a real trade? Follow the model, but sometimes explore what it would skip."""
+    prob = win_chance(ml_model, signal.features, signal.side)
+    if prob is None:
         return True
     signal.confidence = prob
     if prob >= threshold:

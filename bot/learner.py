@@ -73,10 +73,15 @@ def log_shadow(result: dict):
         con.execute(
             "INSERT INTO trades (ts, symbol, side, entry, exit_price, pnl, profitable, features, source, pnl_usd) "
             "VALUES (?,?,?,?,?,?,?,?,'shadow',0)",
-            (ts, result["symbol"], "buy", result["entry"], result["exit"],
+            (ts, result["symbol"], result.get("side", "buy"), result["entry"], result["exit"],
              result["pnl_pct"] * result["entry"], result["profitable"], json.dumps(result["features"]))
         )
         con.commit()
+
+
+def with_side(features: list, side: str) -> list:
+    """Model input = the 10 market readings plus which direction is being bet on."""
+    return list(features) + [1.0 if side == "buy" else 0.0]
 
 
 def labeled_count() -> int:
@@ -106,17 +111,20 @@ def _load_rows() -> list:
     """(ts, features, won, return) for every labeled trade whose features match the current format."""
     with _conn() as con:
         raw = con.execute(
-            "SELECT ts, features, profitable, pnl, entry FROM trades WHERE exit_price IS NOT NULL"
+            "SELECT ts, features, profitable, pnl, entry, side FROM trades WHERE exit_price IS NOT NULL"
         ).fetchall()
     rows = []
-    for ts, features_json, won, pnl, entry in raw:
+    for ts, features_json, won, pnl, entry, side in raw:
         try:
             features = json.loads(features_json)
         except (TypeError, ValueError):
             continue
         if len(features) != config.FEATURE_LEN or not entry:
             continue
-        rows.append((_sort_key(ts), features, int(won), float(pnl) / float(entry)))
+        ret = float(pnl) / float(entry)
+        if side == "sell":
+            ret = abs(ret) if won else -abs(ret)   # stored pnl is already direction-adjusted
+        rows.append((_sort_key(ts), with_side(features, side or "buy"), int(won), ret))
     rows.sort(key=lambda r: r[0])
     return rows
 

@@ -1,7 +1,10 @@
 """
-Shadow trades: pretend trades on every setup the bot sees. No orders are placed. Each one is
-followed to its stop-loss, take-profit or a time limit, then logged as a labeled example.
-This gives the model far more to learn from than the few real trades the account can hold.
+Shadow trades: pretend trades on every setup the bot sees. No orders are placed.
+
+Each setup opens TWO pretend trades at the same moment: one betting the price rises (buy) and
+one betting it falls (sell). Both are followed to their stop-loss, take-profit or a time limit,
+then logged as labeled examples. That teaches the model which DIRECTION a setup favours, not
+just whether to trade, and it doubles the practice data at no cost.
 """
 import time
 from dataclasses import dataclass
@@ -14,6 +17,7 @@ MAX_AGE_SECONDS = 12 * 3600
 @dataclass
 class ShadowTrade:
     symbol: str
+    side: str             # "buy" (bet on a rise) or "sell" (bet on a fall)
     entry: float
     stop_loss: float
     take_profit: float
@@ -24,36 +28,58 @@ class ShadowTrade:
 
 class ShadowBook:
     def __init__(self):
-        self.open: dict = {}
+        self.open: dict = {}          # (symbol, side) -> ShadowTrade
         self.closed_total = 0
 
-    def has(self, symbol: str) -> bool:
-        return symbol in self.open
+    def has(self, symbol: str, side: str = "buy") -> bool:
+        return (symbol, side) in self.open
 
-    def add(self, symbol: str, signal, candle_ts: str):
-        self.open[symbol] = ShadowTrade(
-            symbol=symbol, entry=signal.entry_price, stop_loss=signal.stop_loss,
-            take_profit=signal.take_profit, features=signal.features,
-            opened_at=time.time(), candle_ts=candle_ts,
+    def add(self, symbol: str, signal, candle_ts: str, side: str = "buy"):
+        """Open one pretend trade. For "sell" the exits are mirrored around the entry price."""
+        entry = signal.entry_price
+        if side == "buy":
+            sl, tp = signal.stop_loss, signal.take_profit
+        else:
+            sl = entry + (entry - signal.stop_loss)      # same distance, other direction
+            tp = entry - (signal.take_profit - entry)
+        self.open[(symbol, side)] = ShadowTrade(
+            symbol=symbol, side=side, entry=entry, stop_loss=sl, take_profit=tp,
+            features=signal.features, opened_at=time.time(), candle_ts=candle_ts,
         )
 
-    def update(self, symbol: str, price: float) -> Optional[dict]:
-        """Check one open shadow trade against the live price. Returns a result dict if it closed."""
-        t = self.open.get(symbol)
-        if t is None:
-            return None
-        if price <= t.stop_loss:
-            exit_price, reason = t.stop_loss, "sl"
-        elif price >= t.take_profit:
-            exit_price, reason = t.take_profit, "tp"
-        elif time.time() - t.opened_at >= MAX_AGE_SECONDS:
-            exit_price, reason = price, "timeout"
-        else:
-            return None
-        del self.open[symbol]
-        self.closed_total += 1
-        pnl_pct = (exit_price - t.entry) / t.entry - 2 * FEE_RATE
-        return {
-            "symbol": symbol, "entry": t.entry, "exit": exit_price, "pnl_pct": pnl_pct,
-            "profitable": 1 if pnl_pct > 0 else 0, "features": t.features, "reason": reason,
-        }
+    def add_both(self, symbol: str, signal, candle_ts: str):
+        for side in ("buy", "sell"):
+            if not self.has(symbol, side):
+                self.add(symbol, signal, candle_ts, side)
+
+    def update(self, symbol: str, price: float) -> list:
+        """Check this coin's open pretend trades against the live price. Returns those that closed."""
+        done = []
+        for side in ("buy", "sell"):
+            t = self.open.get((symbol, side))
+            if t is None:
+                continue
+            if side == "buy":
+                hit_sl, hit_tp = price <= t.stop_loss, price >= t.take_profit
+            else:
+                hit_sl, hit_tp = price >= t.stop_loss, price <= t.take_profit
+
+            if hit_sl:
+                exit_price, reason = t.stop_loss, "sl"
+            elif hit_tp:
+                exit_price, reason = t.take_profit, "tp"
+            elif time.time() - t.opened_at >= MAX_AGE_SECONDS:
+                exit_price, reason = price, "timeout"
+            else:
+                continue
+
+            del self.open[(symbol, side)]
+            self.closed_total += 1
+            raw = (exit_price - t.entry) if side == "buy" else (t.entry - exit_price)
+            pnl_pct = raw / t.entry - 2 * FEE_RATE
+            done.append({
+                "symbol": symbol, "side": side, "entry": t.entry, "exit": exit_price,
+                "pnl_pct": pnl_pct, "profitable": 1 if pnl_pct > 0 else 0,
+                "features": t.features, "reason": reason,
+            })
+        return done

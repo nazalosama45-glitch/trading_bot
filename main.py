@@ -236,8 +236,7 @@ def run():
                     continue
                 candle_ts = str(df.index[-1])
 
-                done = shadow.update(symbol, price)
-                if done:
+                for done in shadow.update(symbol, price):
                     learner.log_shadow(done)
 
                 scan_score = config.SHADOW_MIN_SCORE if config.SHADOW_ENABLED else config.MIN_RULE_SCORE
@@ -246,8 +245,9 @@ def run():
                     continue
                 score = round(signal.confidence * 6)
 
-                if config.SHADOW_ENABLED and not shadow.has(symbol) and shadow_seen.get(symbol) != candle_ts:
-                    shadow.add(symbol, signal, candle_ts)
+                # One pretend BUY and one pretend SELL, so it learns which direction wins here
+                if config.SHADOW_ENABLED and shadow_seen.get(symbol) != candle_ts:
+                    shadow.add_both(symbol, signal, candle_ts)
                     shadow_seen[symbol] = candle_ts
 
                 if score < config.MIN_RULE_SCORE or last_attempt.get(symbol) == candle_ts:
