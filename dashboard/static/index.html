@@ -191,8 +191,9 @@ function updateMoney() {
   if (diff > eps) { main.className = "green"; main.textContent = "WINNING " + usd(diff); }
   else if (diff < -eps) { main.className = "red"; main.textContent = "LOSING " + usd(diff); }
   else { main.className = ""; main.textContent = "Even $0.00"; }
+  const sc = startCapital ? "$" + startCapital.toLocaleString(undefined,{maximumFractionDigits:0}) : "…";
   document.getElementById("moneySub").textContent =
-    "Started with $" + startCapital.toLocaleString() + "  |  Finished trades: " + usd(closedUsd) + "  |  Open trades if sold now: " + usd(openUsd);
+    "Started with " + sc + "  |  Finished trades: " + usd(closedUsd) + "  |  Open now: " + usd(openUsd);
 }
 
 async function fetchStats() {
