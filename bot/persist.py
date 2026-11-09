@@ -21,7 +21,7 @@ from pathlib import Path
 logger = logging.getLogger("persist")
 
 # Only these files are ever written back, so a bad database row can't touch other paths.
-FILES = ["data/trades.db", "data/positions.json", "models/model.pkl", "models/learning.json"]
+FILES = ["data/trades.db", "data/positions.json", "data/equity.json", "models/model.pkl", "models/learning.json"]
 
 _last_digest: dict = {}
 

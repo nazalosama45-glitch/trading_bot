@@ -85,6 +85,32 @@ def refresh_cash(exchange: ccxt.Exchange):
         _last_usdt = usdt
 
 
+_last_equity_ts = 0.0
+
+
+def _record_equity(equity: float):
+    """Keep one money reading per minute (last 7 days) for the dashboard chart."""
+    global _last_equity_ts
+    now = time.time()
+    if now - _last_equity_ts < 60:
+        return
+    _last_equity_ts = now
+    f = Path("data/equity.json")
+    try:
+        points = json.loads(f.read_text())
+    except (OSError, ValueError):
+        points = []
+    points.append([int(now), round(equity, 2)])
+    points = points[-10080:]
+    try:
+        f.parent.mkdir(exist_ok=True)
+        tmp = f.with_suffix(".tmp")
+        tmp.write_text(json.dumps(points))
+        os.replace(tmp, f)
+    except OSError as e:
+        logger.warning(f"Could not write equity history: {e}")
+
+
 def save_positions(risk: RiskManager, last_prices: dict, portfolio_value: float = None):
     """Write open positions + live profit to a file the dashboard reads."""
     rows = []
@@ -113,6 +139,8 @@ def save_positions(risk: RiskManager, last_prices: dict, portfolio_value: float 
             "equity": round(_last_usdt + held, 2),
             "start_capital": config.START_CAPITAL,
         }
+    if account:
+        _record_equity(account["equity"])
     try:
         Path("data").mkdir(exist_ok=True)
         tmp = Path("data/positions.json.tmp")

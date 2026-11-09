@@ -191,6 +191,14 @@ def positions():
         return jsonify({"updated": None, "positions": []})
 
 
+@app.route("/api/equity")
+def equity_history():
+    try:
+        return jsonify({"points": json.loads(Path("data/equity.json").read_text())})
+    except (OSError, ValueError):
+        return jsonify({"points": []})
+
+
 @app.route("/api/learning")
 def learning():
     from bot import learner

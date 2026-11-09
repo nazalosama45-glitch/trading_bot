@@ -57,6 +57,11 @@
   details dl { margin-top: 10px; font-size: 14px; }
   details dt { font-weight: 600; margin-top: 8px; }
   details dd { color: #8b949e; }
+  .ranges { display: flex; gap: 6px; justify-content: center; margin-top: 12px; }
+  .ranges button { background: #21262d; color: #8b949e; border: 1px solid #30363d; border-radius: 6px; padding: 3px 12px; font-size: 12px; cursor: pointer; }
+  .ranges button.on { background: #1f6feb33; color: #79c0ff; border-color: #1f6feb; }
+  #chart svg { width: 100%; height: 100%; display: block; }
+  #chart .tip { position: absolute; top: 0; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 3px 8px; font-size: 12px; pointer-events: none; white-space: nowrap; display: none; }
   .log-box { font-family: monospace; font-size: 12px; color: #8b949e; max-height: 200px; overflow-y: auto; margin-top: 10px; white-space: pre-wrap; }
 </style>
 </head>
@@ -79,7 +84,10 @@
   </div>
 
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
-    <div class="card" style="text-align:center;grid-column:1/-1"><div class="label">MONEY IN THE ACCOUNT (fake money)</div><div class="value" style="font-size:44px" id="sbAccount">-</div><div class="hint" id="sbAccountHint">Loading...</div></div>
+    <div class="card" style="text-align:center;grid-column:1/-1"><div class="label">MONEY IN THE ACCOUNT (fake money)</div><div class="value" style="font-size:44px" id="sbAccount">-</div><div class="hint" id="sbAccountHint">Loading...</div>
+      <div class="ranges" id="ranges"><button data-h="1">1H</button><button data-h="24" class="on">24H</button><button data-h="168">7D</button></div>
+      <div id="chart" style="position:relative;height:200px;margin-top:6px"></div>
+      <div class="hint" id="chartHint"></div></div>
     <div class="card" style="text-align:center"><div class="label">TOTAL TRADES</div><div class="value blue" style="font-size:40px" id="sbTotal">-</div><div class="hint">Finished trades only</div></div>
     <div class="card" style="text-align:center"><div class="label">WINNING</div><div class="value green" style="font-size:40px" id="sbWin">-</div><div class="hint">Trades that made money</div></div>
     <div class="card" style="text-align:center"><div class="label">LOSING</div><div class="value red" style="font-size:40px" id="sbLose">-</div><div class="hint">Trades that lost money</div></div>
@@ -371,7 +379,53 @@ async function fetchLearning() {
     </tr>`).join("") : '<tr><td colspan="5" class="empty">The self-test needs 300 examples.</td></tr>';
 }
 
-function refresh() { fetchPositions(); fetchStats(); fetchStatus(); fetchLogs(); fetchLearning(); }
+let eqPoints = [], eqHours = 24;
+document.querySelectorAll("#ranges button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("#ranges button").forEach(x => x.classList.remove("on"));
+  b.classList.add("on"); eqHours = +b.dataset.h; drawChart();
+});
+async function fetchEquity() {
+  const r = await fetch("/api/equity").then(x => x.json()).catch(() => null);
+  if (r) { eqPoints = r.points || []; drawChart(); }
+}
+function drawChart() {
+  const box = document.getElementById("chart");
+  const cut = Date.now() / 1000 - eqHours * 3600;
+  const pts = eqPoints.filter(p => p[0] >= cut);
+  if (currentEquity) pts.push([Date.now() / 1000, currentEquity]);
+  const hint = document.getElementById("chartHint");
+  if (pts.length < 2) { box.innerHTML = '<div class="empty" style="padding-top:80px">The chart fills in as the bot runs (one point per minute).</div>'; hint.textContent = ""; return; }
+  const W = box.clientWidth || 600, H = 200, pad = 6;
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const x0 = xs[0], x1 = xs[xs.length - 1] || x0 + 1;
+  let lo = Math.min(...ys, startCapital || ys[0]), hi = Math.max(...ys, startCapital || ys[0]);
+  if (hi - lo < 1) { hi += 1; lo -= 1; }
+  const X = t => pad + (t - x0) / (x1 - x0 || 1) * (W - 2 * pad);
+  const Y = v => pad + (hi - v) / (hi - lo) * (H - 2 * pad);
+  const up = ys[ys.length - 1] >= (startCapital || ys[0]);
+  const col = up ? "#3fb950" : "#f85149";
+  const line = pts.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1)).join("");
+  const area = line + `L${X(x1).toFixed(1)},${H}L${X(x0).toFixed(1)},${H}Z`;
+  const base = startCapital ? `<line x1="0" x2="${W}" y1="${Y(startCapital)}" y2="${Y(startCapital)}" stroke="#8b949e" stroke-dasharray="4 4" stroke-width="1"/>` : "";
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".25"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+    ${base}<path d="${area}" fill="url(#g)"/><path d="${line}" fill="none" stroke="${col}" stroke-width="2"/>
+    <circle id="dot" r="4" fill="${col}" style="display:none"/></svg><div class="tip" id="tip"></div>`;
+  const svg = box.querySelector("svg"), tip = box.querySelector("#tip"), dot = box.querySelector("#dot");
+  svg.onmousemove = e => {
+    const rx = (e.offsetX / box.clientWidth) * W;
+    let best = pts[0]; for (const p of pts) if (Math.abs(X(p[0]) - rx) < Math.abs(X(best[0]) - rx)) best = p;
+    dot.setAttribute("cx", X(best[0])); dot.setAttribute("cy", Y(best[1])); dot.style.display = "";
+    tip.style.display = "block";
+    tip.textContent = new Date(best[0] * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) + "  $" + best[1].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    tip.style.left = Math.min(Math.max(e.offsetX - 70, 0), box.clientWidth - 160) + "px";
+  };
+  svg.onmouseleave = () => { tip.style.display = "none"; dot.style.display = "none"; };
+  const ch = ys[ys.length - 1] - ys[0];
+  hint.textContent = "Change in this view: " + usd(ch) + "  |  dashed line = starting money";
+}
+
+function refresh() { fetchEquity(); fetchPositions(); fetchStats(); fetchStatus(); fetchLogs(); fetchLearning(); }
 refresh();
 setInterval(refresh, 3000);
 </script>
