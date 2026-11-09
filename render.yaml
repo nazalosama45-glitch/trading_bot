@@ -47,6 +47,8 @@ services:
         value: "2"
       - key: COOLDOWN_SECONDS
         value: "300"
+      - key: EXPLORE_RATE
+        value: "1.0"
       - key: ML_MIN_PROB
         value: "0"
       - key: MAX_OPEN_POSITIONS
