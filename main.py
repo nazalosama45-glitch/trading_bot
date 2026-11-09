@@ -108,13 +108,12 @@ def save_positions(risk: RiskManager, last_prices: dict, portfolio_value: float 
         })
     account = {}
     if _last_usdt is not None:
+        # Only count cash + positions the bot itself opened (not testnet pre-loaded balances)
         held = sum(r["qty"] * r["price"] for r in rows)
-        # Use the real exchange portfolio value (includes untracked coins) when available
-        equity = portfolio_value if portfolio_value is not None else _last_usdt + held
         account = {
             "cash_usdt": round(_last_usdt, 2),
-            "held_value": round(equity - _last_usdt, 2),
-            "equity": round(equity, 2),
+            "held_value": round(held, 2),
+            "equity": round(_last_usdt + held, 2),
             "start_capital": config.START_CAPITAL,
         }
     try:
