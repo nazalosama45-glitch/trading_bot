@@ -197,9 +197,17 @@ def load_model():
         try:
             # Safe: the file is written only by retrain() in this app
             with open(MODEL_PATH, "rb") as f:
-                return pickle.load(f)
+                model = pickle.load(f)
+            # Verify the model expects the right number of features (10 market + 1 side = 11)
+            expected = config.FEATURE_LEN + 1
+            model.predict_proba([[0.0] * expected])
+            return model
         except Exception as e:
-            logger.warning(f"Could not load model: {e}")
+            logger.warning(f"Discarding stale/incompatible model ({e}). Will retrain from scratch.")
+            try:
+                MODEL_PATH.unlink()
+            except OSError:
+                pass
     return None
 
 
