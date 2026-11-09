@@ -114,6 +114,19 @@
   </div>
 
   <div class="section">
+    <h2>What the bot has learned</h2>
+    <p class="explain">Besides its real trades, the bot makes "pretend" trades on every setup it sees and watches how they end. Every 50 new results it studies them all, tests itself on results it hasn't seen, and decides how picky to be.</p>
+    <div class="verdict" id="learnBox">
+      <div class="main" id="learnMain" style="font-size:17px">Loading...</div>
+      <div class="sub" id="learnSub"></div>
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>If the model must be at least this sure</th><th>Trades it would have taken</th><th>Win rate</th><th>Profit factor (above 1 = makes money)</th><th>Average per trade</th></tr></thead>
+      <tbody id="learnTable"></tbody>
+    </table></div>
+  </div>
+
+  <div class="section">
     <h2>What the bot is doing</h2>
     <p class="explain">Newest at the top. It checks the market every few seconds, so many lines are just "no chance found yet".</p>
     <div class="feed" id="feed"></div>
@@ -320,7 +333,37 @@ async function stopBot() {
   setTimeout(fetchStatus, 1000);
 }
 
-function refresh() { fetchPositions(); fetchStats(); fetchStatus(); fetchLogs(); }
+async function fetchLearning() {
+  const r = await fetch("/api/learning").then(x => x.json()).catch(() => null);
+  if (!r) return;
+  const src = r.sources || {};
+  const rep = r.report || {};
+  const counts = `Examples: ${src.backtest || 0} from history, ${src.shadow || 0} pretend trades, ${src.live || 0} real trades.`;
+  const main = document.getElementById("learnMain");
+  const sub = document.getElementById("learnSub");
+  if (!rep.rows) {
+    main.textContent = "Not trained yet. It needs at least 100 results.";
+    sub.textContent = counts;
+    document.getElementById("learnTable").innerHTML = '<tr><td colspan="5" class="empty">Nothing to show yet.</td></tr>';
+    return;
+  }
+  const when = (rep.trained_at || "").substring(0, 16).replace("T", " ");
+  main.textContent = rep.edge_found
+    ? `It found a pattern that would have made money. It now only takes trades it is at least ${Math.round(rep.threshold * 100)}% sure about.`
+    : "So far it found no pattern that makes money on results it hasn't seen. It trades only a share of setups, to keep learning.";
+  sub.textContent = `${counts} Last studied ${when} UTC on ${rep.rows} examples.`;
+  const rows = [];
+  if (rep.baseline) rows.push({ label: "No model (every setup)", ...rep.baseline });
+  (rep.holdout || []).forEach(h => rows.push({ label: "At least " + Math.round(h.threshold * 100) + "% sure", ...h }));
+  document.getElementById("learnTable").innerHTML = rows.length ? rows.map(h => `
+    <tr>
+      <td>${esc(h.label)}</td><td>${h.n}</td><td>${(h.win_rate * 100).toFixed(1)}%</td>
+      <td class="${h.profit_factor >= 1.1 ? 'green' : 'red'}">${h.profit_factor.toFixed(2)}</td>
+      <td class="${h.avg_ret >= 0 ? 'green' : 'red'}">${(h.avg_ret * 100).toFixed(3)}%</td>
+    </tr>`).join("") : '<tr><td colspan="5" class="empty">The self-test needs 300 examples.</td></tr>';
+}
+
+function refresh() { fetchPositions(); fetchStats(); fetchStatus(); fetchLogs(); fetchLearning(); }
 refresh();
 setInterval(refresh, 3000);
 </script>

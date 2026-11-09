@@ -50,6 +50,12 @@ def compute_all(df: pd.DataFrame) -> pd.DataFrame:
     df["macd_signal"] = df["macd"].ewm(span=9, adjust=False).mean()
     df["macd_hist"] = df["macd"] - df["macd_signal"]
 
+    # --- Price-independent features, so lessons carry across coins ---
+    df["atr_pct"] = df["atr"] / c
+    df["macd_pct"] = df["macd_hist"] / c
+    df["ret_4"] = c.pct_change(4)
+    df["rsi_chg"] = df["rsi"].diff(3)
+
     # --- Composite signal score (rule-based, pre-ML) ---
     score = pd.Series(0.0, index=df.index)
     score += df["trend_up"] * 1.0
@@ -64,12 +70,15 @@ def compute_all(df: pd.DataFrame) -> pd.DataFrame:
 
 def feature_vector(row: pd.Series) -> list:
     """Extract ML feature vector from an indicator row."""
-    return [
+    return [float(v) for v in (
         row["rsi"],
-        row["macd_hist"],
+        row["macd_pct"],
         row["bb_pct"],
         row["vol_ratio"],
         row["trend_up"],
         row["ema_fast"] / row["ema_slow"] - 1,
         row["close"] / row["ema_200"] - 1,
-    ]
+        row["atr_pct"],
+        row["ret_4"],
+        row["rsi_chg"],
+    )]

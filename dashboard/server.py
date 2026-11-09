@@ -188,6 +188,12 @@ def positions():
         return jsonify({"updated": None, "positions": []})
 
 
+@app.route("/api/learning")
+def learning():
+    from bot import learner
+    return jsonify({"sources": learner.source_counts(), "report": learner.load_learning() or {}})
+
+
 @app.route("/api/logs")
 def logs():
     log_file = Path("logs/bot.log")

@@ -9,6 +9,7 @@ import time
 import logging
 import signal
 import sys
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,7 +18,8 @@ import ccxt
 from bot import config
 from bot.data_feed import get_exchange, fetch_ohlcv, fetch_balance, fetch_ticker
 from bot.indicators import compute_all
-from bot.strategy import evaluate
+from bot.strategy import candidate, decide
+from bot.shadow import ShadowBook
 from bot.risk_manager import RiskManager
 from bot.safety_guard import SafetyGuard
 from bot.executor import place_market_order, place_oco_order
@@ -66,6 +68,14 @@ def get_portfolio_value(exchange: ccxt.Exchange) -> float:
             ticker = fetch_ticker(exchange, sym)
             total += qty * ticker.get("last", 0)
     return total
+
+
+def _retrain_job(state: dict):
+    """Runs in a background thread so a slow training run never pauses trading."""
+    try:
+        state["result"] = learner.retrain()
+    finally:
+        state["busy"] = False
 
 
 def refresh_cash(exchange: ccxt.Exchange):
@@ -132,6 +142,9 @@ def run():
         return
 
     learner.init_db()
+    seeded = learner.seed_from_file()
+    if seeded:
+        logger.info(f"Starting pre-trained: loaded {seeded} historical examples.")
     exchange = get_exchange()
     exchange.load_markets()
 
@@ -150,12 +163,17 @@ def run():
         pass
     guard = SafetyGuard()
     ml_model = learner.load_model()
+    threshold = learner.load_threshold()
     if ml_model:
-        logger.info("Loaded existing ML model.")
+        logger.info(f"Loaded existing ML model (approval threshold {threshold:.2f}).")
 
-    last_candle_time: dict = {}  # symbol -> last processed candle timestamp
+    shadow = ShadowBook()
+    shadow_seen: dict = {}       # symbol -> candle already shadowed
+    last_attempt: dict = {}      # symbol -> candle already considered for a real trade
     cooldown_until: dict = {}    # symbol -> time before which no new trade is attempted
     last_prices: dict = {}       # symbol -> latest price for open positions
+    retrain_state = {"busy": False, "result": None}
+    trained_rows = learner.labeled_count() if ml_model else 0  # 0 = never trained yet
 
     while _running:
         loop_start = time.time()
@@ -191,43 +209,59 @@ def run():
                     features=pos.get("features", []),
                     pnl_usd=pnl,
                 )
-                # Retrain check (counts only the bot's own live trades)
-                count = learner.live_trade_count()
-                if count % config.RETRAIN_EVERY == 0 and count > 0:
-                    logger.info(f"Retraining ML model ({count} trades)...")
-                    ml_model = learner.retrain() or ml_model
+        # ── Learning: retrain in the background as new labeled examples arrive ──
+        if retrain_state["result"] is not None:
+            ml_model, threshold = retrain_state["result"]
+            retrain_state["result"] = None
+            logger.info(f"Switched to the retrained model (approval threshold {threshold:.2f}).")
+        n_labeled = learner.labeled_count()
+        if (not retrain_state["busy"] and n_labeled >= 100
+                and (trained_rows == 0 or n_labeled - trained_rows >= config.RETRAIN_EVERY_ROWS)):
+            retrain_state["busy"] = True
+            trained_rows = n_labeled
+            logger.info(f"Retraining the model on {n_labeled} labeled examples...")
+            threading.Thread(target=_retrain_job, args=(retrain_state,), daemon=True).start()
 
-        # ── Scan for new signals ───────────────────────────────────────────────
+        # ── Scan every coin: follow shadow trades, then look for new setups ────
         for symbol in config.SYMBOLS:
             if not _running:
                 break
             try:
+                raw = fetch_ohlcv(exchange, symbol)
+                if raw.empty or len(raw) < 60:
+                    continue
+                price = float(raw["close"].iloc[-1])    # live price
+                df = compute_all(raw.iloc[:-1])         # completed candles only, so volume is final
+                if df.empty:
+                    continue
+                candle_ts = str(df.index[-1])
+
+                done = shadow.update(symbol, price)
+                if done:
+                    learner.log_shadow(done)
+
+                scan_score = config.SHADOW_MIN_SCORE if config.SHADOW_ENABLED else config.MIN_RULE_SCORE
+                signal = candidate(df, symbol, min_score=scan_score, price=price)
+                if signal is None:
+                    continue
+                score = round(signal.confidence * 6)
+
+                if config.SHADOW_ENABLED and not shadow.has(symbol) and shadow_seen.get(symbol) != candle_ts:
+                    shadow.add(symbol, signal, candle_ts)
+                    shadow_seen[symbol] = candle_ts
+
+                if score < config.MIN_RULE_SCORE or last_attempt.get(symbol) == candle_ts:
+                    continue
                 if symbol in risk.open_positions or time.time() < cooldown_until.get(symbol, 0):
                     continue
+                last_attempt[symbol] = candle_ts
 
-                df = fetch_ohlcv(exchange, symbol)
-                if df.empty:
-                    continue
-
-                df = compute_all(df)
-                if df.empty:
-                    continue
-
-                if not config.SCAN_EVERY_LOOP:
-                    # Only act once per new candle
-                    latest_ts = str(df.index[-1])
-                    if last_candle_time.get(symbol) == latest_ts:
-                        continue
-                    last_candle_time[symbol] = latest_ts
-
-                signal = evaluate(df, symbol, ml_model)
-                if signal is None:
+                if not decide(signal, ml_model, threshold):
+                    logger.info(f"Model skipped {symbol}: win chance {signal.confidence:.2f} is below {threshold:.2f}")
                     continue
 
                 allowed, reason = risk.can_open_trade(symbol)
                 if not allowed:
-                    if not config.SCAN_EVERY_LOOP:
-                        logger.info(f"Trade blocked for {symbol}: {reason}")
                     continue
 
                 cooldown_until[symbol] = time.time() + config.COOLDOWN_SECONDS

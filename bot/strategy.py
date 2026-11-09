@@ -1,4 +1,5 @@
 import logging
+import random
 import pandas as pd
 from dataclasses import dataclass
 from typing import Optional
@@ -12,23 +13,23 @@ logger = logging.getLogger(__name__)
 class Signal:
     symbol: str
     side: str           # always "buy" (spot, long-only)
-    confidence: float   # 0-1
+    confidence: float   # rule score / 6, replaced by the model's win chance once decide() runs
     stop_loss: float
     take_profit: float
     entry_price: float
     features: list      # for ML logging
 
 
-def evaluate(df: pd.DataFrame, symbol: str, ml_model=None) -> Optional[Signal]:
+def candidate(df: pd.DataFrame, symbol: str, min_score: Optional[int] = None,
+              price: Optional[float] = None) -> Optional[Signal]:
     """
-    Long-only. Rules generate candidate setups; the ML model (if trained)
-    must then rate the candidate at least ML_MIN_PROB to be taken.
+    Rule-based long setup read from the LAST row of df. Pass completed candles only,
+    so volume and indicators are final. `price` is where the order would really fill.
     """
     if df.empty or len(df) < 50:
         return None
 
     last = df.iloc[-1]
-    entry = last["close"]
     atr = last["atr"]
     if atr == 0:
         return None
@@ -41,29 +42,42 @@ def evaluate(df: pd.DataFrame, symbol: str, ml_model=None) -> Optional[Signal]:
         last["close"] > last["ema_200"],
         last["bb_pct"] > 0.4,
     ]
-    rule_score = sum(conditions)
-    if rule_score < config.MIN_RULE_SCORE:
+    score = sum(conditions)
+    if score < (config.MIN_RULE_SCORE if min_score is None else min_score):
         return None
 
-    features = feature_vector(last)
-    confidence = rule_score / 6.0
-
-    if ml_model is not None:
-        try:
-            ml_prob = float(ml_model.predict_proba([features])[0][1])
-        except Exception as e:
-            logger.warning(f"ML prediction failed: {e}")
-            return None
-        if ml_prob < config.ML_MIN_PROB:
-            return None
-        confidence = ml_prob
-
+    entry = float(price) if price else float(last["close"])
     return Signal(
         symbol=symbol,
         side="buy",
-        confidence=confidence,
+        confidence=score / 6.0,
         stop_loss=round(entry - atr * config.ATR_SL_MULT, 6),
         take_profit=round(entry + atr * config.ATR_TP_MULT, 6),
         entry_price=entry,
-        features=features,
+        features=feature_vector(last),
     )
+
+
+def decide(signal: Signal, ml_model, threshold: float) -> bool:
+    """Take a real trade? Follow the model, but sometimes explore what it would skip."""
+    if ml_model is None:
+        return True
+    try:
+        prob = float(ml_model.predict_proba([signal.features])[0][1])
+    except Exception as e:
+        logger.warning(f"ML prediction failed: {e}")
+        return True
+    signal.confidence = prob
+    if prob >= threshold:
+        return True
+    return random.random() < config.EXPLORE_RATE
+
+
+def evaluate(df: pd.DataFrame, symbol: str, ml_model=None, threshold: Optional[float] = None,
+             price: Optional[float] = None) -> Optional[Signal]:
+    """Rules, then the model's say-so. Used by the backtester (no model) and by older callers."""
+    sig = candidate(df, symbol, price=price)
+    if sig is None or ml_model is None:
+        return sig
+    limit = config.ML_MIN_PROB if threshold is None else threshold
+    return sig if decide(sig, ml_model, limit) else None

@@ -39,6 +39,15 @@ MIN_RULE_SCORE = int(os.getenv("MIN_RULE_SCORE", "5"))
 # Pause on a coin after a trade attempt or close, so it can't re-enter instantly
 COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "300"))
 
+# Learning: "shadow trades" are pretend trades on every setup the bot sees (no orders), so it
+# collects many more labeled examples than the few real trades it can afford to open.
+FEATURE_LEN = 10
+SHADOW_ENABLED = os.getenv("SHADOW_ENABLED", "true").lower() == "true"
+SHADOW_MIN_SCORE = int(os.getenv("SHADOW_MIN_SCORE", "3"))
+# Chance of taking a real trade the model rejects, so it keeps seeing the cases it would skip
+EXPLORE_RATE = float(os.getenv("EXPLORE_RATE", "0.5"))
+RETRAIN_EVERY_ROWS = int(os.getenv("RETRAIN_EVERY_ROWS", "50"))
+
 # Minimum ML win-probability required to take a trade (tuned by train.py's holdout test)
 ML_MIN_PROB = float(os.getenv("ML_MIN_PROB", "0.5"))
 
