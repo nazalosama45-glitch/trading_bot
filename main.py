@@ -52,7 +52,7 @@ signal.signal(signal.SIGTERM, _handle_signal)
 _last_usdt = None  # cash balance from the latest balance check
 
 
-def get_portfolio_value(exchange: ccxt.Exchange) -> float:
+def get_portfolio_value(exchange: ccxt.Exchange, risk=None) -> float:
     """Return approximate USDT portfolio value."""
     global _last_usdt
     if config.DRY_RUN:
@@ -60,13 +60,10 @@ def get_portfolio_value(exchange: ccxt.Exchange) -> float:
     balance = fetch_balance(exchange)
     usdt = balance.get("USDT", 0.0)
     _last_usdt = usdt
+    # Only the bot's own open trades count; testnet pre-loads every account with other coins
     total = usdt
-    for sym in config.SYMBOLS:
-        base = sym.split("/")[0]
-        qty = balance.get(base, 0.0)
-        if qty > 0:
-            ticker = fetch_ticker(exchange, sym)
-            total += qty * ticker.get("last", 0)
+    for sym, pos in (risk.open_positions.items() if risk else []):
+        total += pos["qty"] * (fetch_ticker(exchange, sym).get("last") or pos["entry"])
     return total
 
 
@@ -179,7 +176,7 @@ def run():
     while _running:
         loop_start = time.time()
 
-        portfolio_value = get_portfolio_value(exchange)
+        portfolio_value = get_portfolio_value(exchange, risk)
         logger.info(f"Portfolio value: ${portfolio_value:.2f} | Daily PnL: {risk.daily_pnl:.2%}")
 
         # ── Check open positions for SL/TP ────────────────────────────────────
