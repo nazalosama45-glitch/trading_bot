@@ -36,11 +36,13 @@ services:
       - key: SYMBOLS
         value: BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,XRP/USDT,ADA/USDT,DOGE/USDT,LINK/USDT,LTC/USDT,AVAX/USDT
       - key: TIMEFRAME
-        value: 15m
+        value: 1h
       - key: SCAN_EVERY_LOOP
         value: "true"
       - key: MIN_RULE_SCORE
-        value: "4"
+        value: "3"
+      - key: SHADOW_MIN_SCORE
+        value: "2"
       - key: COOLDOWN_SECONDS
         value: "300"
       - key: ML_MIN_PROB

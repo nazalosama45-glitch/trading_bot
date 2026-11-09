@@ -19,8 +19,8 @@ MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "3"))
 CANDLE_LIMIT = 200
 
 # ATR multipliers for SL/TP
-ATR_SL_MULT = 1.5
-ATR_TP_MULT = 3.0
+ATR_SL_MULT = 3.0
+ATR_TP_MULT = 6.0
 
 # Play-money starting balance shown on the dashboard
 START_CAPITAL = float(os.getenv("START_CAPITAL", "10000"))

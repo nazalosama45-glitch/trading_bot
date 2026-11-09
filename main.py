@@ -243,7 +243,7 @@ def run():
                 signal = candidate(df, symbol, min_score=scan_score, price=price)
                 if signal is None:
                     continue
-                score = round(signal.confidence * 6)
+                score = round(signal.confidence * 4)
 
                 # One pretend BUY and one pretend SELL, so it learns which direction wins here
                 if config.SHADOW_ENABLED and shadow_seen.get(symbol) != candle_ts:

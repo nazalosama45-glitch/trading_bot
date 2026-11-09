@@ -34,13 +34,16 @@ def candidate(df: pd.DataFrame, symbol: str, min_score: Optional[int] = None,
     if atr == 0:
         return None
 
+    # Mean-reversion: buy when RSI is oversold and price is near the lower Bollinger Band.
+    # This was the only idea with PF > 1.0 in out-of-sample testing across 10 coins.
+    rsi = last["rsi"]
+    bb_pct = last["bb_pct"]   # 0 = at lower band, 1 = at upper band
+
     conditions = [
-        last["ema_fast"] > last["ema_slow"],
-        40 < last["rsi"] < 70,
-        last["macd_hist"] > 0,
-        last["vol_ratio"] > 1.0,
-        last["close"] > last["ema_200"],
-        last["bb_pct"] > 0.4,
+        rsi < 40,                             # oversold
+        bb_pct < 0.25,                        # price near lower Bollinger Band
+        last["vol_ratio"] > 0.8,              # some volume (not a dead market)
+        last["ema_fast"] > last["ema_slow"] * 0.985,  # not in a hard downtrend
     ]
     score = sum(conditions)
     if score < (config.MIN_RULE_SCORE if min_score is None else min_score):
@@ -50,7 +53,7 @@ def candidate(df: pd.DataFrame, symbol: str, min_score: Optional[int] = None,
     return Signal(
         symbol=symbol,
         side="buy",
-        confidence=score / 6.0,
+        confidence=score / 4.0,
         stop_loss=round(entry - atr * config.ATR_SL_MULT, 6),
         take_profit=round(entry + atr * config.ATR_TP_MULT, 6),
         entry_price=entry,
