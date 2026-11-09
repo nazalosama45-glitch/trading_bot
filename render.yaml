@@ -25,6 +25,8 @@ services:
         value: admin
       - key: DASHBOARD_PUBLIC_READ
         value: "true"
+      - key: DASHBOARD_PUBLIC_CONTROL
+        value: "true"
       - key: AUTOSTART_BOT
         value: "true"
       - key: USE_TESTNET
