@@ -25,6 +25,8 @@ services:
         value: admin
       - key: DASHBOARD_PUBLIC_READ
         value: "true"
+      - key: RESET_ON_START
+        value: "true"
       - key: AUTOSTART_BOT
         value: "true"
       - key: USE_TESTNET
@@ -56,4 +58,4 @@ services:
       - key: MAX_POSITION_PCT
         value: "0.02"
       - key: START_CAPITAL
-        value: "9972"
+        value: "9975"

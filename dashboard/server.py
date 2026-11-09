@@ -247,6 +247,22 @@ if __name__ == "__main__":
         signal.signal(signal.SIGTERM, _shutdown)
 
     learner.init_db()
+    if os.getenv("RESET_ON_START", "false").lower() == "true":
+        con = _db()
+        if con:
+            con.execute("DELETE FROM trades WHERE source IN ('live', 'shadow')")
+            con.commit()
+            con.close()
+        pos_file = Path("data/positions.json")
+        if pos_file.exists():
+            pos_file.write_text(json.dumps({"updated": None, "positions": []}))
+        model_file = Path("models/model.pkl")
+        if model_file.exists():
+            try:
+                model_file.unlink()
+            except OSError:
+                pass
+        print("RESET_ON_START: cleared live/shadow trades and positions.", flush=True)
     if AUTOSTART_BOT:
         with BOT_LOCK:
             _start_bot_locked()
