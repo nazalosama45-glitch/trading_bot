@@ -88,7 +88,7 @@ def refresh_cash(exchange: ccxt.Exchange):
         _last_usdt = usdt
 
 
-def save_positions(risk: RiskManager, last_prices: dict):
+def save_positions(risk: RiskManager, last_prices: dict, portfolio_value: float = None):
     """Write open positions + live profit to a file the dashboard reads."""
     rows = []
     for sym, pos in risk.open_positions.items():
@@ -109,10 +109,12 @@ def save_positions(risk: RiskManager, last_prices: dict):
     account = {}
     if _last_usdt is not None:
         held = sum(r["qty"] * r["price"] for r in rows)
+        # Use the real exchange portfolio value (includes untracked coins) when available
+        equity = portfolio_value if portfolio_value is not None else _last_usdt + held
         account = {
             "cash_usdt": round(_last_usdt, 2),
-            "held_value": round(held, 2),
-            "equity": round(_last_usdt + held, 2),
+            "held_value": round(equity - _last_usdt, 2),
+            "equity": round(equity, 2),
             "start_capital": config.START_CAPITAL,
         }
     try:
@@ -305,7 +307,7 @@ def run():
                 logger.exception(f"Error processing {symbol}: {e}")
 
         # ── Sleep until next check (60s) ───────────────────────────────────────
-        save_positions(risk, last_prices)
+        save_positions(risk, last_prices, portfolio_value)
         elapsed = time.time() - loop_start
         sleep_time = max(0, 20 - elapsed)
         logger.debug(f"Loop done in {elapsed:.1f}s. Sleeping {sleep_time:.1f}s...")

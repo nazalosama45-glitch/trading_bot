@@ -80,10 +80,10 @@
 
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
     <div class="card" style="text-align:center;grid-column:1/-1"><div class="label">MONEY IN THE ACCOUNT (fake money)</div><div class="value" style="font-size:44px" id="sbAccount">-</div><div class="hint" id="sbAccountHint">Loading...</div></div>
-    <div class="card" style="text-align:center"><div class="label">TOTAL TRADES</div><div class="value blue" style="font-size:40px" id="sbTotal">-</div><div class="hint" id="sbTotalHint"></div></div>
-    <div class="card" style="text-align:center"><div class="label">WINNING</div><div class="value green" style="font-size:40px" id="sbWin">-</div><div class="hint" id="sbWinHint"></div></div>
-    <div class="card" style="text-align:center"><div class="label">LOSING</div><div class="value red" style="font-size:40px" id="sbLose">-</div><div class="hint" id="sbLoseHint"></div></div>
-    <div class="card" style="text-align:center"><div class="label">TOTAL PROFIT</div><div class="value" style="font-size:40px" id="sbProfit">-</div><div class="hint">Fake dollars: finished + open trades</div></div>
+    <div class="card" style="text-align:center"><div class="label">TOTAL TRADES</div><div class="value blue" style="font-size:40px" id="sbTotal">-</div><div class="hint">Finished trades only</div></div>
+    <div class="card" style="text-align:center"><div class="label">WINNING</div><div class="value green" style="font-size:40px" id="sbWin">-</div><div class="hint">Trades that made money</div></div>
+    <div class="card" style="text-align:center"><div class="label">LOSING</div><div class="value red" style="font-size:40px" id="sbLose">-</div><div class="hint">Trades that lost money</div></div>
+    <div class="card" style="text-align:center"><div class="label">ACCURACY</div><div class="value" style="font-size:40px" id="sbAccuracy">-</div><div class="hint">Win rate on finished trades</div></div>
   </div>
 
   <div class="verdict" id="verdict">
@@ -166,30 +166,33 @@ function pct(n) { return (n >= 0 ? "+" : "") + n.toFixed(2) + "%"; }
 function usd(n) { return (n >= 0 ? "+$" : "-$") + Math.abs(n).toFixed(2); }
 
 let closedUsd = 0, openUsd = 0, haveClosed = false, havePos = false;
-let cTotal = 0, cWins = 0, cLosses = 0, oUp = 0, oDown = 0;
+let cTotal = 0, cWins = 0, cLosses = 0, startCapital = 0, currentEquity = 0;
 function updateMoney() {
   if (!haveClosed || !havePos) return;
-  const total = closedUsd + openUsd;
-  const openCount = oUp + oDown;
-  document.getElementById("sbTotal").textContent = cTotal + openCount;
-  document.getElementById("sbTotalHint").textContent = cTotal + " finished + " + openCount + " open";
-  document.getElementById("sbWin").textContent = cWins + oUp;
-  document.getElementById("sbWinHint").textContent = cWins + " finished + " + oUp + " open (up now)";
-  document.getElementById("sbLose").textContent = cLosses + oDown;
-  document.getElementById("sbLoseHint").textContent = cLosses + " finished + " + oDown + " open (down now)";
-  const sp = document.getElementById("sbProfit");
-  sp.textContent = usd(total);
-  sp.className = "value " + (total > 0.005 ? "green" : total < -0.005 ? "red" : "");
+  // Top cards: finished trades only
+  document.getElementById("sbTotal").textContent = cTotal;
+  document.getElementById("sbWin").textContent = cWins;
+  document.getElementById("sbLose").textContent = cLosses;
+  const acc = document.getElementById("sbAccuracy");
+  if (cTotal > 0) {
+    const pct = Math.round(cWins / cTotal * 100);
+    acc.textContent = pct + "%";
+    acc.className = "value " + (pct >= 50 ? "green" : "red");
+  } else {
+    acc.textContent = "-";
+    acc.className = "value";
+  }
+  // Winning/losing banner: based on equity vs start capital
+  const diff = currentEquity - startCapital;
   const box = document.getElementById("money");
   const main = document.getElementById("moneyMain");
-  const eps = 0.005;
-  box.className = "verdict " + (total > eps ? "good" : total < -eps ? "bad" : "");
-  if (total > eps) { main.className = "green"; main.textContent = "WINNING " + usd(total); }
-  else if (total < -eps) { main.className = "red"; main.textContent = "LOSING " + usd(total); }
+  const eps = 0.5;
+  box.className = "verdict " + (diff > eps ? "good" : diff < -eps ? "bad" : "");
+  if (diff > eps) { main.className = "green"; main.textContent = "WINNING " + usd(diff); }
+  else if (diff < -eps) { main.className = "red"; main.textContent = "LOSING " + usd(diff); }
   else { main.className = ""; main.textContent = "Even $0.00"; }
   document.getElementById("moneySub").textContent =
-    "Finished trades: " + usd(closedUsd) + "  |  Open trades if sold now: " + usd(openUsd) +
-    "  |  Fake money, started with 10,000 USDT (" + (total / 100).toFixed(3) + "% of it)";
+    "Started with $" + startCapital.toLocaleString() + "  |  Finished trades: " + usd(closedUsd) + "  |  Open trades if sold now: " + usd(openUsd);
 }
 
 async function fetchStats() {
@@ -200,7 +203,8 @@ async function fetchStats() {
   const vs = document.getElementById("verdictSub");
   v.className = "verdict";
 
-  closedUsd = r.total_usd || 0; cTotal = r.total; cWins = r.wins; cLosses = r.losses; haveClosed = true; updateMoney();
+  closedUsd = r.total_usd || 0; cTotal = r.total; cWins = r.wins; cLosses = r.losses; haveClosed = true;
+  updateMoney();
   document.getElementById("total").textContent = r.total;
   const left = 20 - (r.total % 20);
   document.getElementById("learnNext").textContent = left + " more";
@@ -268,10 +272,13 @@ async function fetchPositions() {
     acc.className = "value " + (diff > 0.005 ? "green" : diff < -0.005 ? "red" : "");
     document.getElementById("sbAccountHint").textContent =
       "Started with $" + r.start_capital.toLocaleString() + "  |  now " + usd(diff) +
-      "  |  cash $" + r.cash_usdt.toLocaleString() + " + coins held $" + r.held_value.toLocaleString();
+      "  |  cash $" + Number(r.cash_usdt).toLocaleString(undefined,{maximumFractionDigits:2}) +
+      " + coins $" + Number(r.held_value).toLocaleString(undefined,{maximumFractionDigits:2});
   }
   const openSum = r.positions.reduce((s, p) => s + p.pnl_usd, 0);
-  openUsd = openSum; oUp = up; oDown = down; havePos = true; updateMoney();
+  openUsd = openSum;
+  if (r.equity !== undefined) { currentEquity = r.equity; startCapital = r.start_capital || 0; }
+  havePos = true; updateMoney();
   const openEl = document.getElementById("openNow");
   openEl.textContent = usd(openSum);
   openEl.className = "value " + (r.positions.length ? (openSum >= 0 ? "green" : "red") : "");
