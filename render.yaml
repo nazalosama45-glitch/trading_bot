@@ -42,7 +42,7 @@ services:
       - key: SCAN_EVERY_LOOP
         value: "true"
       - key: MIN_RULE_SCORE
-        value: "3"
+        value: "2"
       - key: SHADOW_MIN_SCORE
         value: "1"
       - key: COOLDOWN_SECONDS
@@ -52,7 +52,7 @@ services:
       - key: ML_MIN_PROB
         value: "0"
       - key: MAX_OPEN_POSITIONS
-        value: "8"
+        value: "10"
       - key: DAILY_LOSS_LIMIT_PCT
         value: "1.0"
       - key: MAX_NOTIONAL_PCT
