@@ -322,6 +322,10 @@ function friendly(line) {
   }
   if ((x = msg.match(/SafetyGuard blocked (\S+)/))) return { time, kind: "warn", text: `Skipped ${x[1]}: the market looks too unpredictable right now` };
   if ((x = msg.match(/Trade blocked for (\S+): (.*)/))) return { time, kind: "warn", text: `Did not buy ${x[1]}: ${x[2].toLowerCase()}` };
+  if ((x = msg.match(/Model skipped (\S+): win chance ([\d.]+)/))) return { time, kind: "warn", text: `Found a chance on ${x[1]} but skipped it (only ${Math.round(x[2] * 100)}% sure)` };
+  if (/Model retrained/.test(msg)) return { time, kind: "", text: "Finished studying its results" };
+  if (/Trade logged/.test(msg)) return null;
+  if ((x = msg.match(/Portfolio value: \$([\d.]+)/))) return { time, kind: "check", text: `Checked all 10 coins, no good chance yet (money $${Number(x[1]).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})})` };
   if (/Trading Bot starting/.test(msg)) return { time, kind: "", text: "The bot was turned on" };
   if (/Restored open trades/.test(msg)) return { time, kind: "", text: "The bot remembered its open trades from before" };
   if (/Retraining ML model/.test(msg)) return { time, kind: "", text: "The bot is studying its past trades to get smarter" };
@@ -331,7 +335,10 @@ function friendly(line) {
 
 async function fetchLogs() {
   const r = await fetch("/api/logs").then(x => x.json()).catch(() => ({ lines: [] }));
-  const items = r.lines.map(friendly).filter(Boolean).slice(-40).reverse();
+  // Keep only the newest "checked" line so routine checks don't flood the feed
+  const all = r.lines.map(friendly).filter(Boolean);
+  const lastCheck = all.map(i => i.kind).lastIndexOf("check");
+  const items = all.filter((i, n) => i.kind !== "check" || n === lastCheck).slice(-40).reverse();
   document.getElementById("feed").innerHTML = items.length
     ? items.map(i => `<div class="row ${i.kind}"><span class="time">${esc(i.time)}</span><span class="what">${esc(i.text)}</span></div>`).join("")
     : '<div class="row"><span class="what" style="color:#8b949e">Nothing to report yet. The bot is watching the market.</span></div>';
