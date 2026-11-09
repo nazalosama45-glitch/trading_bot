@@ -37,6 +37,12 @@ services:
         value: BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,XRP/USDT,ADA/USDT,DOGE/USDT,LINK/USDT,LTC/USDT,AVAX/USDT
       - key: TIMEFRAME
         value: 15m
+      - key: SCAN_EVERY_LOOP
+        value: "true"
+      - key: MIN_RULE_SCORE
+        value: "4"
+      - key: COOLDOWN_SECONDS
+        value: "300"
       - key: ML_MIN_PROB
         value: "0"
       - key: MAX_OPEN_POSITIONS

@@ -154,6 +154,7 @@ def run():
         logger.info("Loaded existing ML model.")
 
     last_candle_time: dict = {}  # symbol -> last processed candle timestamp
+    cooldown_until: dict = {}    # symbol -> time before which no new trade is attempted
     last_prices: dict = {}       # symbol -> latest price for open positions
 
     while _running:
@@ -176,6 +177,7 @@ def run():
                 close_side = "sell" if pos["side"] == "buy" else "buy"
                 place_market_order(exchange, symbol, close_side, pos["qty"])
                 pnl = risk.register_close(symbol, price)
+                cooldown_until[symbol] = time.time() + config.COOLDOWN_SECONDS
                 refresh_cash(exchange)
                 profitable = pnl > 0
                 guard.register_trade_result(profitable)
@@ -200,6 +202,9 @@ def run():
             if not _running:
                 break
             try:
+                if symbol in risk.open_positions or time.time() < cooldown_until.get(symbol, 0):
+                    continue
+
                 df = fetch_ohlcv(exchange, symbol)
                 if df.empty:
                     continue
@@ -208,11 +213,12 @@ def run():
                 if df.empty:
                     continue
 
-                # Only act on a new completed candle
-                latest_ts = str(df.index[-1])
-                if last_candle_time.get(symbol) == latest_ts:
-                    continue
-                last_candle_time[symbol] = latest_ts
+                if not config.SCAN_EVERY_LOOP:
+                    # Only act once per new candle
+                    latest_ts = str(df.index[-1])
+                    if last_candle_time.get(symbol) == latest_ts:
+                        continue
+                    last_candle_time[symbol] = latest_ts
 
                 signal = evaluate(df, symbol, ml_model)
                 if signal is None:
@@ -220,8 +226,11 @@ def run():
 
                 allowed, reason = risk.can_open_trade(symbol)
                 if not allowed:
-                    logger.info(f"Trade blocked for {symbol}: {reason}")
+                    if not config.SCAN_EVERY_LOOP:
+                        logger.info(f"Trade blocked for {symbol}: {reason}")
                     continue
+
+                cooldown_until[symbol] = time.time() + config.COOLDOWN_SECONDS
 
                 size_mult = 1.0
                 if not config.PRACTICE_MODE:

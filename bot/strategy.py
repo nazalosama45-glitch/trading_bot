@@ -42,7 +42,7 @@ def evaluate(df: pd.DataFrame, symbol: str, ml_model=None) -> Optional[Signal]:
         last["bb_pct"] > 0.4,
     ]
     rule_score = sum(conditions)
-    if rule_score < 5:
+    if rule_score < config.MIN_RULE_SCORE:
         return None
 
     features = feature_vector(last)
