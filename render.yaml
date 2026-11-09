@@ -45,6 +45,8 @@ services:
         value: "2"
       - key: SHADOW_MIN_SCORE
         value: "1"
+      - key: MAX_HOLD_HOURS
+        value: "2"
       - key: COOLDOWN_SECONDS
         value: "300"
       - key: EXPLORE_RATE

@@ -126,6 +126,7 @@ def save_positions(risk: RiskManager, last_prices: dict, portfolio_value: float 
             "stop_loss": pos["stop_loss"],
             "take_profit": pos["take_profit"],
             "features": pos.get("features", []),
+            "opened": pos.get("opened"),
             "pnl_pct": round(direction * (price - pos["entry"]) / pos["entry"] * 100, 3),
             "pnl_usd": round(direction * (price - pos["entry"]) * pos["qty"], 2),
         })
@@ -182,6 +183,7 @@ def run():
                 "side": p["side"], "entry": p["entry"], "qty": p["qty"],
                 "stop_loss": p["stop_loss"], "take_profit": p["take_profit"],
                 "features": p.get("features", []),
+                "opened": p.get("opened", time.time()),
             }
         if risk.open_positions:
             logger.info(f"Restored open trades after restart: {list(risk.open_positions)}")
@@ -215,9 +217,12 @@ def run():
                 continue
             last_prices[symbol] = price
             hit = risk.check_sl_tp(symbol, price)
+            pos = risk.open_positions[symbol]
+            if not hit and config.MAX_HOLD_HOURS and time.time() - pos.get("opened", time.time()) > config.MAX_HOLD_HOURS * 3600:
+                hit = "time"
             if hit:
-                logger.info(f"{symbol}: {'Stop-loss' if hit == 'sl' else 'Take-profit'} hit @ {price}")
-                pos = risk.open_positions[symbol]
+                label = {"sl": "Stop-loss", "tp": "Take-profit"}.get(hit, "Time limit")
+                logger.info(f"{symbol}: {label} hit @ {price}")
                 close_side = "sell" if pos["side"] == "buy" else "buy"
                 place_market_order(exchange, symbol, close_side, pos["qty"])
                 pnl = risk.register_close(symbol, price)
@@ -321,6 +326,7 @@ def run():
                         signal.stop_loss, signal.take_profit, qty
                     )
                     risk.open_positions[symbol]["features"] = signal.features
+                    risk.open_positions[symbol]["opened"] = time.time()
                     refresh_cash(exchange)
                     place_oco_order(
                         exchange, symbol, signal.side, qty,

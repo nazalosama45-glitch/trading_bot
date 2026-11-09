@@ -315,6 +315,7 @@ function friendly(line) {
   if ((x = msg.match(/Order filled: SELL ([\d.]+) (\S+) @ ([\d.]+)/))) return { time, kind: "buy", text: `Sold ${x[1]} ${x[2]} at $${money(x[3])}` };
   if ((x = msg.match(/Signal: BUY (\S+)/))) return { time, kind: "buy", text: `Spotted a chance to buy ${x[1]}` };
   if ((x = msg.match(/(\S+): Stop-loss hit @ ([\d.]+)/))) return { time, kind: "lose", text: `${x[1]} fell to $${money(x[2])}, so the bot sold to limit the loss` };
+  if ((x = msg.match(/(\S+): Time limit hit @ ([\d.]+)/))) return { time, kind: "", text: `${x[1]} held 2 hours, so the bot sold at $${money(x[2])}` };
   if ((x = msg.match(/(\S+): Take-profit hit @ ([\d.]+)/))) return { time, kind: "win", text: `${x[1]} rose to $${money(x[2])}, so the bot sold and kept the profit` };
   if ((x = msg.match(/Position closed: (\S+) .*\(([-\d.]+)%\)/))) {
     const p = parseFloat(x[2]);

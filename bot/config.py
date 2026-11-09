@@ -38,6 +38,8 @@ SCAN_EVERY_LOOP = os.getenv("SCAN_EVERY_LOOP", "false").lower() == "true"
 MIN_RULE_SCORE = int(os.getenv("MIN_RULE_SCORE", "5"))
 # Pause on a coin after a trade attempt or close, so it can't re-enter instantly
 COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "300"))
+# Close a real trade after this many hours even if no exit price was hit (0 = never)
+MAX_HOLD_HOURS = float(os.getenv("MAX_HOLD_HOURS", "0"))
 
 # Learning: "shadow trades" are pretend trades on every setup the bot sees (no orders), so it
 # collects many more labeled examples than the few real trades it can afford to open.
