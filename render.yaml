@@ -44,7 +44,7 @@ services:
       - key: MIN_RULE_SCORE
         value: "3"
       - key: SHADOW_MIN_SCORE
-        value: "2"
+        value: "1"
       - key: COOLDOWN_SECONDS
         value: "300"
       - key: EXPLORE_RATE
