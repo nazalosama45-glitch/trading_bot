@@ -35,6 +35,7 @@ DASH_PORT = int(os.getenv("PORT") or os.getenv("DASHBOARD_PORT") or "5000")  # h
 DASH_USER = os.getenv("DASHBOARD_USER", "admin")
 DASH_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
 AUTOSTART_BOT = os.getenv("AUTOSTART_BOT", "false").lower() == "true"
+START_DELAY_SECONDS = int(os.getenv("START_DELAY_SECONDS", "120"))
 # When true, viewing needs no login; only the actions that change things (start/stop) still do.
 PUBLIC_READ = os.getenv("DASHBOARD_PUBLIC_READ", "false").lower() == "true"
 PUBLIC_CONTROL = os.getenv("DASHBOARD_PUBLIC_CONTROL", "false").lower() == "true"
@@ -259,9 +260,20 @@ if __name__ == "__main__":
 
     learner.init_db()
     if AUTOSTART_BOT:
-        with BOT_LOCK:
-            _start_bot_locked()
-            WANT_RUNNING = True
+        def _delayed_start():
+            global WANT_RUNNING
+            # On a redeploy the old copy keeps trading until it is stopped and saves its final
+            # state then. Wait for that, reload it, and only then start, so no trade is forgotten.
+            if persist.enabled():
+                time.sleep(START_DELAY_SECONDS)
+                try:
+                    print(f"Reloaded {persist.restore()} saved file(s) before starting the bot", flush=True)
+                except Exception as e:
+                    print(f"Reload before start failed, using the first copy: {e}", flush=True)
+            with BOT_LOCK:
+                _start_bot_locked()
+                WANT_RUNNING = True
+        threading.Thread(target=_delayed_start, daemon=True).start()
     threading.Thread(target=_watchdog, daemon=True).start()
     print(f"Dashboard running at http://{DASH_HOST}:{DASH_PORT}", flush=True)
     app.run(host=DASH_HOST, port=DASH_PORT, debug=False)

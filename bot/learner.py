@@ -21,6 +21,7 @@ LEARNING_PATH = Path("models/learning.json")
 SEED_PATH = Path(__file__).parent.parent / "seed" / "backtest_trades.csv"
 
 THRESHOLDS = [0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70]
+OWN_DATA_MIN = 300  # results from the current strategy needed before old history is dropped
 NO_EDGE_THRESHOLD = 0.99  # nothing tested beat the market, so the model approves almost nothing
 
 
@@ -111,10 +112,15 @@ def _load_rows() -> list:
     """(ts, features, won, return) for every labeled trade whose features match the current format."""
     with _conn() as con:
         raw = con.execute(
-            "SELECT ts, features, profitable, pnl, entry, side FROM trades WHERE exit_price IS NOT NULL"
+            "SELECT ts, features, profitable, pnl, entry, side, source FROM trades WHERE exit_price IS NOT NULL"
         ).fetchall()
+    # Once the current strategy has enough results of its own, stop mixing in the old
+    # strategy's history: it describes different setups and drowns out what the bot sees now.
+    own = sum(1 for r in raw if r[6] != "backtest")
+    if own >= OWN_DATA_MIN:
+        raw = [r for r in raw if r[6] != "backtest"]
     rows = []
-    for ts, features_json, won, pnl, entry, side in raw:
+    for ts, features_json, won, pnl, entry, side, _source in raw:
         try:
             features = json.loads(features_json)
         except (TypeError, ValueError):

@@ -6,12 +6,16 @@ one betting it falls (sell). Both are followed to their stop-loss, take-profit o
 then logged as labeled examples. That teaches the model which DIRECTION a setup favours, not
 just whether to trade, and it doubles the practice data at no cost.
 """
+import json
+import os
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Optional
 
 FEE_RATE = 0.001          # 0.1% each side, same as the backtest
 MAX_AGE_SECONDS = 12 * 3600
+SAVE_PATH = Path("data/shadow.json")
 
 
 @dataclass
@@ -30,6 +34,27 @@ class ShadowBook:
     def __init__(self):
         self.open: dict = {}          # (symbol, side) -> ShadowTrade
         self.closed_total = 0
+
+    @classmethod
+    def load(cls) -> "ShadowBook":
+        """Pick up the pretend trades that were still running before a restart."""
+        book = cls()
+        try:
+            for row in json.loads(SAVE_PATH.read_text()):
+                t = ShadowTrade(**row)
+                book.open[(t.symbol, t.side)] = t
+        except (OSError, ValueError, TypeError):
+            pass
+        return book
+
+    def save(self):
+        try:
+            SAVE_PATH.parent.mkdir(exist_ok=True)
+            tmp = SAVE_PATH.with_suffix(".tmp")
+            tmp.write_text(json.dumps([asdict(t) for t in self.open.values()]))
+            os.replace(tmp, SAVE_PATH)
+        except OSError:
+            pass
 
     def has(self, symbol: str, side: str = "buy") -> bool:
         return (symbol, side) in self.open

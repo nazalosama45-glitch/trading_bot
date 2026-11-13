@@ -23,7 +23,7 @@ from bot.shadow import ShadowBook
 from bot.risk_manager import RiskManager
 from bot.safety_guard import SafetyGuard
 from bot.executor import place_market_order, place_oco_order
-from bot import learner
+from bot import learner, persist
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
 os.makedirs("logs", exist_ok=True)
@@ -111,6 +111,18 @@ def _record_equity(equity: float):
         logger.warning(f"Could not write equity history: {e}")
 
 
+def backup_now():
+    """Save state to the database right after a trade opens or closes, not a minute later."""
+    if not persist.enabled():
+        return
+    def _go():
+        try:
+            persist.upload_all()
+        except Exception as e:
+            logger.warning(f"Immediate backup failed (the regular one will retry): {e}")
+    threading.Thread(target=_go, daemon=True).start()
+
+
 def save_positions(risk: RiskManager, last_prices: dict, portfolio_value: float = None):
     """Write open positions + live profit to a file the dashboard reads."""
     rows = []
@@ -195,7 +207,9 @@ def run():
     if ml_model:
         logger.info(f"Loaded existing ML model (approval threshold {threshold:.2f}).")
 
-    shadow = ShadowBook()
+    shadow = ShadowBook.load()
+    if shadow.open:
+        logger.info(f"Restored {len(shadow.open)} pretend trades after restart.")
     shadow_seen: dict = {}       # symbol -> candle already shadowed
     last_attempt: dict = {}      # symbol -> candle already considered for a real trade
     cooldown_until: dict = {}    # symbol -> time before which no new trade is attempted
@@ -205,6 +219,7 @@ def run():
 
     while _running:
         loop_start = time.time()
+        trade_changed = False
 
         portfolio_value = get_portfolio_value(exchange, risk)
         logger.info(f"Portfolio value: ${portfolio_value:.2f} | Daily PnL: {risk.daily_pnl:.2%}")
@@ -228,6 +243,7 @@ def run():
                 pnl = risk.register_close(symbol, price)
                 cooldown_until[symbol] = time.time() + config.COOLDOWN_SECONDS
                 refresh_cash(exchange)
+                trade_changed = True
                 profitable = pnl > 0
                 guard.register_trade_result(profitable)
                 learner.log_trade(
@@ -328,6 +344,7 @@ def run():
                     risk.open_positions[symbol]["features"] = signal.features
                     risk.open_positions[symbol]["opened"] = time.time()
                     refresh_cash(exchange)
+                    trade_changed = True
                     place_oco_order(
                         exchange, symbol, signal.side, qty,
                         signal.stop_loss, signal.take_profit
@@ -338,6 +355,9 @@ def run():
 
         # ── Sleep until next check (60s) ───────────────────────────────────────
         save_positions(risk, last_prices, portfolio_value)
+        shadow.save()
+        if trade_changed:
+            backup_now()
         elapsed = time.time() - loop_start
         sleep_time = max(0, 20 - elapsed)
         logger.debug(f"Loop done in {elapsed:.1f}s. Sleeping {sleep_time:.1f}s...")
