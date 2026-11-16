@@ -14,3 +14,9 @@
 - Note: "Daily PnL" in logs is a sum of per-trade % returns, not account change (cosmetic; limit is 1.0 so it never blocks trades).
 - Change: none. Last change was 2026-11-13 (<3 days) and nothing is broken. Committed this log locally only (no push, to avoid a restart).
 - Next: watch whether profit factor keeps climbing toward 1.0+ as data grows; consider grouping same-hour coin trades in analysis.
+
+## 2026-11-16
+- Dashboard and all /api endpoints return 503 "This service has been suspended by its owner" (Render header: suspend-by-user). The bot is NOT running; no data could be read for the last 24h.
+- Not a code crash: suspension is an account-level action on Render (by the owner, or possibly Render free-tier limits). Only the user can resume it in the Render dashboard.
+- Change: none. A push would not restart a suspended service, so no push. Log committed locally only.
+- Next: once resumed, check that open trades were restored from the database and that trading/pretend trades restart.
