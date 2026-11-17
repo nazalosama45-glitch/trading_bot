@@ -433,9 +433,15 @@ function drawChart() {
   hint.textContent = "Change in this view: " + usd(ch) + "  |  dashed line = starting money";
 }
 
-function refresh() { fetchEquity(); fetchPositions(); fetchStats(); fetchStatus(); fetchLogs(); fetchLearning(); }
+let tick = 0;
+function refresh() {
+  fetchPositions(); fetchStats(); fetchStatus();
+  if (tick % 4 === 0) { fetchLogs(); fetchLearning(); }   // heavier data: every 20 s
+  if (tick % 12 === 0) fetchEquity();                      // money history: every minute
+  tick++;
+}
 refresh();
-setInterval(refresh, 3000);
+setInterval(() => { if (!document.hidden) refresh(); }, 5000);
 </script>
 </body>
 </html>

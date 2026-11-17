@@ -42,6 +42,21 @@ PUBLIC_CONTROL = os.getenv("DASHBOARD_PUBLIC_CONTROL", "false").lower() == "true
 WANT_RUNNING = False  # True once the bot has been started; the watchdog restarts it if it dies
 
 
+@app.after_request
+def compress(resp):
+    # The page polls often; compressing keeps a hosted plan's monthly bandwidth from running out.
+    if ("gzip" in request.headers.get("Accept-Encoding", "") and not resp.direct_passthrough
+            and resp.status_code == 200 and "Content-Encoding" not in resp.headers
+            and resp.mimetype in ("application/json", "text/html", "text/css", "application/javascript")):
+        data = resp.get_data()
+        if len(data) > 600:
+            import gzip
+            resp.set_data(gzip.compress(data, 5))
+            resp.headers["Content-Encoding"] = "gzip"
+            resp.headers["Vary"] = "Accept-Encoding"
+    return resp
+
+
 @app.route("/healthz")
 def healthz():
     return "ok"  # open on purpose: a pinger hits this to keep a free host awake; it reveals nothing
@@ -195,7 +210,9 @@ def positions():
 @app.route("/api/equity")
 def equity_history():
     try:
-        return jsonify({"points": json.loads(Path("data/equity.json").read_text())})
+        pts = json.loads(Path("data/equity.json").read_text())
+        step = max(1, len(pts) // 400)
+        return jsonify({"points": pts[::step] + ([pts[-1]] if pts and (len(pts) - 1) % step else [])})
     except (OSError, ValueError):
         return jsonify({"points": []})
 
@@ -213,7 +230,15 @@ def logs():
         return jsonify({"lines": []})
     with open(log_file, "r", encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
-    return jsonify({"lines": [l.rstrip()[:200] for l in lines[-600:]]})
+    keep, last_pv = [], None
+    for i, l in enumerate(lines[-1500:]):
+        if "Portfolio value:" in l:
+            last_pv = l
+            continue
+        keep.append(l)
+    if last_pv:
+        keep.append(last_pv)
+    return jsonify({"lines": [l.rstrip()[:200] for l in keep[-300:]]})
 
 
 @app.route("/", defaults={"path": ""})

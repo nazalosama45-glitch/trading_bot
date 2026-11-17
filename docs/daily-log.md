@@ -25,3 +25,9 @@
 - Still suspended: dashboard and all /api endpoints return 503 "This service has been suspended by its owner" (Render header: suspend-by-user). Second day in a row with no trading and no data.
 - Change: none. Nothing to fix in code; a push cannot wake a suspended service. Log committed locally only.
 - Next: user needs to press "Resume" on the service in the Render dashboard. After that, check open trades were restored and trades/pretend trades restart.
+
+## 2026-11-17 (cause found)
+- Render workspace suspended: "You've used the 5 GB of free bandwidth in your Hobby workspace. Add a card to continue ($0.15 per 1 GB) or upgrade to Pro."
+- Likely culprit: the dashboard polled every 3 s, including /api/equity (thousands of points) and /api/logs (600 lines), uncompressed.
+- Fix (committed, not yet live): gzip responses, equity downsampled to ~400 points, logs filtered (repeated "Portfolio value" lines collapsed, 300 lines max), polling every 5 s, heavy data every 20-60 s, no polling when the tab is hidden.
+- Needs the user: add a card on Render (pay-as-you-go $0.15/GB) or upgrade, or wait for the monthly reset, or move hosts. The service stays suspended until then.
