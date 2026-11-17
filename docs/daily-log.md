@@ -20,3 +20,8 @@
 - Not a code crash: suspension is an account-level action on Render (by the owner, or possibly Render free-tier limits). Only the user can resume it in the Render dashboard.
 - Change: none. A push would not restart a suspended service, so no push. Log committed locally only.
 - Next: once resumed, check that open trades were restored from the database and that trading/pretend trades restart.
+
+## 2026-11-17
+- Still suspended: dashboard and all /api endpoints return 503 "This service has been suspended by its owner" (Render header: suspend-by-user). Second day in a row with no trading and no data.
+- Change: none. Nothing to fix in code; a push cannot wake a suspended service. Log committed locally only.
+- Next: user needs to press "Resume" on the service in the Render dashboard. After that, check open trades were restored and trades/pretend trades restart.
